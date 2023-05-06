@@ -229,20 +229,21 @@ def receiver():
     radio.open_rx_pipe(1, OWN_ADDRESS) 
     radio.listen = True
 
-    while not radio.available():
-        time.sleep(1/1000)
-        continue
+    while True:
+        while not radio.available():
+            time.sleep(1/1000)
+            continue
 
-    received_message = radio.read(radio.get_dynamic_payload_size())
+        received_message = radio.read(radio.get_dynamic_payload_size())
 
-    header = received_message[0]
+        header = received_message[0]
 
-    if header == HEADER_STATUS:
-        receiveStatus(radio, received_message)
-    elif header == HEADER_FILE_PACKET:
-        receiveFile(radio, received_message)
-    elif header == TOKEN_PACKET:
-        receiveToken(radio)
+        if header == HEADER_STATUS:
+            receiveStatus(radio, received_message)
+        elif header == HEADER_FILE_PACKET:
+            receiveFile(radio, received_message)
+        elif header == TOKEN_PACKET:
+            receiveToken(radio)
 
 def receiveStatus(radio, message):
     """
