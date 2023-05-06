@@ -85,6 +85,7 @@ def sendStatus(radio):
     Stores info in a Table together with the corresponding link address. 
         If link address already in table update values, otherwise add new row
     """
+    global tb
     radio.open_rx_pipe(1, OWN_ADDRESS)
     for address in LINK_ADDRESSES:
         radio.open_tx_pipe(address)
@@ -105,9 +106,9 @@ def sendStatus(radio):
             answer_packet = radio.read(radio.get_dynamic_payload_size())
             radio.listen = False
 
-            if answer_packet[0] == HEADER_STATUS_PACKET_REPLY:
-                file_status = int.from_bytes(answer_packet[1], byteorder='big')
-                token_status = int.from_bytes(answer_packet[2], byteorder='big')
+            if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
+                file_status = answer_packet[1]
+                token_status = answer_packet[2]
                 new_row = {'Address':address, 'File': file_status, 'Token':token_status}
                 if (tb['Address'] == new_row['Address']).any():
                     tb.loc[tb['Address'] == new_row['Address']] = new_row
@@ -126,7 +127,9 @@ def sendFile(radio,filename):
     If TR stops responding ACKs keep trying during Timeout (think best value).
     If a TR timeouts, eliminate from tb so token is not passed to it.
     """
+    global tb
     file = readFile(filename)
+    timed_out = False
     for index, row in tb.iterrows():
         if row['File'] == 0:
             radio.open_tx_pipe(row['Address'])
@@ -151,7 +154,7 @@ def sendFile(radio,filename):
             
             if not timed_out:
                 end_packet = HEADER_FILE_PACKET + packet_id + EOT_BYTES
-                while (not radio.write(message) and not timed_out):
+                while (not radio.write(end_packet) and not timed_out):
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)            
     
     logging.debug('sendFile()')
@@ -174,6 +177,7 @@ def sendToken(radio):
     If Token is sent to a TR with 'token' = 1, 'token' TR is sent to the last row
     Returns True if token is passed to another node, False otherwise.
     """
+    global tb
     token_passed = False
 
     if 0 in tb['Token'].values:
@@ -181,14 +185,15 @@ def sendToken(radio):
             if row['Token'] == 0:
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
-
                 token_passed = False
+                timed_out = False
                 while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
                     tb.loc[index,'Token'] = 1
-                    tb = tb.append(row).drop(index) #move row to the last position
+                    tb =tb.drop(index)
+                    tb = pd.concat([tb,row]) #move row to the last position
                     break
         
     if not token_passed: 
@@ -197,11 +202,13 @@ def sendToken(radio):
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
+                timed_out = False
                 while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
-                    tb = tb.append(row).drop(index) #move row to the last position
+                    tb =tb.drop(index)#move row to the last position
+                    tb = pd.concat([tb,row])
                     break
 
     logging.debug('sendToken()')
@@ -239,7 +246,7 @@ def receiver():
 
         received_message = radio.read(radio.get_dynamic_payload_size())
 
-        header = received_message[0]
+        header = received_message[0].to_bytes(1, byteorder='big') 
 
         if header == HEADER_STATUS:
             receiveStatus(radio, received_message)
@@ -290,7 +297,7 @@ def receiveFile(radio, first_message):
         if radio.available():
             received_message = radio.read(radio.get_dynamic_payload_size())
             header = received_message[0]
-            if header == HEADER_FILE_PACKET:
+            if header.to_bytes(1, byteorder='big') == HEADER_FILE_PACKET:
                 if last_packet_id != received_message[1]:
                     if received_message[2:] == EOT_BYTES:
                         transmission_end = True
@@ -322,4 +329,5 @@ def saveFile(file_data): #TODO Save file in usb, particular for each team
     Gets file in bytes.
     Save file in usb.
     """
-    pass
+    with open('transmittedFile.txt','wb') as transmittedFile:
+        transmittedFile.write(file_data)
