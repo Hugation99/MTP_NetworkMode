@@ -2,9 +2,12 @@ from pyrf24 import RF24, rf24
 import pandas as pd
 import time
 import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
 #Array of link addresses (5 bytes each)
 LINK_ADDRESSES = [b'NodeA1', b'NodeA2', b'NodeB1', b'NodeB2', b'NodeC1', b'NodeC2']
-OWN_ADDRESS = b'NodeA1'
+OWN_ADDRESS = b'NodeA1' #TODO Change to each address of each team TR
 LINK_ADDRESSES.remove(OWN_ADDRESS) 
 
 #Filename TODO: Change for each team
@@ -53,7 +56,7 @@ def transmitter():
         raise OSError("nRF24L01 hardware isn't responding")
     radio.payload_size = 32
     radio.channel = 26 #6A 20
-    radio.data_rate = rf24.RF24_1MBPS
+    radio.data_rate = rf24.RF24_250KBPS
     radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_HIGH)
     radio.dynamic_payloads = True
     radio.set_auto_ack(True)
@@ -88,7 +91,7 @@ def sendStatus(radio):
         response = False
         timed_out = False
         start_time = time.time()
-        while not response or not timed_out:
+        while not response and not timed_out:
             response = radio.write(HEADER_STATUS+OWN_ADDRESS)
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         
@@ -96,7 +99,7 @@ def sendStatus(radio):
             radio.listen = True
             timed_out = False
             start_time = time.time()
-            while not radio.available() or not timed_out:
+            while not radio.available() and not timed_out:
                 time.sleep(1/1000)
                 timed_out = (time.time() - start_time > TIMEOUT_STATUS_REPLY)
             answer_packet = radio.read(radio.get_dynamic_payload_size())
@@ -133,7 +136,7 @@ def sendFile(radio,filename):
             for i in range(0, len(file),PACKET_SIZE-2):
                 message = HEADER_FILE_PACKET + packet_id + file[i:i+PACKET_SIZE-2]
 
-                while (not radio.write(message) or not timed_out):
+                while (not radio.write(message) and not timed_out):
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)
 
                 if timed_out:
@@ -148,7 +151,7 @@ def sendFile(radio,filename):
             
             if not timed_out:
                 end_packet = HEADER_FILE_PACKET + packet_id + EOT_BYTES
-                while (not radio.write(message) or not timed_out):
+                while (not radio.write(message) and not timed_out):
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)            
     
     logging.debug('sendFile()')
@@ -180,7 +183,7 @@ def sendToken(radio):
                 radio.open_tx_pipe(row['Address'])
 
                 token_passed = False
-                while (not token_passed or not timed_out):
+                while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
@@ -194,7 +197,7 @@ def sendToken(radio):
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
-                while (not token_passed or not timed_out):
+                while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
@@ -261,7 +264,7 @@ def receiveStatus(radio, message):
     response = False
     timed_out = False
     start_time = time.time()
-    while not response or not timed_out:
+    while not response and not timed_out:
         response = radio.write(info)
         timed_out = (time.time() - start_time > TIMEOUT_STATUS)
     radio.listen = True
@@ -280,8 +283,8 @@ def receiveFile(radio, first_message):
 
     timed_out = False
     start_time = time.time()
-    while not transmission_end or not timed_out:
-        while not radio.available() or not timed_out:
+    while not transmission_end and not timed_out:
+        while not radio.available() and not timed_out:
             time.sleep(1/1000)
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         if radio.available():
