@@ -1,8 +1,18 @@
-import pyrf24
+from pyrf24 import RF24, rf24
 import pandas as pd
-
+import time
+import logging
 #Array of link addresses (5 bytes each)
 LINK_ADDRESSES = [b'NodeA1', b'NodeA2', b'NodeB1', b'NodeB2', b'NodeC1', b'NodeC2']
+
+#Filename TODO: Change for each team
+filename = 'text.txt' 
+
+#Packet size
+PACKET_SIZE = 32
+
+#Timeout
+TIMEOUT = 10
 
 #Global Table with the reachable transceivers
 tb = pd.DataFrame(columns=['Address', 'Token', 'File'])
@@ -24,13 +34,28 @@ HEADER_TOKEN_PACKET_REPLY = b'\x0E'
 
 def transmitter():
     """
+    Initializes radio
     Calls sendStatus()
     Calls sendFile()
     Calls sendToken()
     """
 
+    radio = RF24()
+    if not radio.begin(4,0): #TODO: Here the 1st pin cahnegs for each team
+        raise OSError("nRF24L01 hardware isn't responding")
+    radio.payload_size = 32
+    radio.channel = 26 #6A 20
+    radio.data_rate = rf24.RF24_1MBPS
+    radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_HIGH)
+    radio.dynamic_payloads = True
+    radio.set_auto_ack(True)
+    radio.ack_payloads = True
+    radio.set_retries(5, 15) 
+    radio.listen = False
+    
+
 #this function has to be executed every time the TR is passed the token
-def sendStatus():
+def sendStatus(radio):
     """
     Sends Status Packet to every Link Addresses. 
     Adjust retries and delay btw retries
@@ -38,14 +63,55 @@ def sendStatus():
     Stores info in a Table together with the corresponding link address. 
         If link address already in table update values, otherwise add new row
     """
+    for address in LINK_ADDRESSES:
+        radio.open_tx_pipe(address)
+        response = radio.write(STATUS_PACKET)
+        if response:
+            if radio.available():
+                ack_payload = radio.read(radio.get_dynamic_payload_size())
+                file_status = int.from_bytes(ack_payload[0], byteorder='big')
+                token_status = int.from_bytes(ack_payload[1], byteorder='big')
+                new_row = {'Address':address, 'File': file_status, 'Token':token_status}
+                if (tb['Address'] == new_row['Address']).any():
+                    tb.loc[tb['Address'] == new_row['Address']] = new_row
+                else:
+                    tb.loc[len(tb)] = new_row
+    logging.debug('sendStatus():')                
+    logging.debug(tb)              
+            
 
-def sendFile():
+
+def sendFile(radio,filename):
     """
     Send File to transceivers that do not have it already. (Check table)
     If TR stops responding ACKs keep trying during Timeout (think best value).
     If a TR timeouts, eliminate from tb so token is not passed to it.
-
     """
+    
+    file = readFile(filename)
+    for index, row in tb.iterrows():
+        if row['File'] == 0:
+            radio.open_tx_pipe(row['Address'])
+            packet_id = b'\x00'
+            start_time = time.time()
+            for i in range(0, len(file),PACKET_SIZE-2):
+                message = HEADER_FILE_PACKET + packet_id + file[i:i+PACKET_SIZE-2]
+
+                timed_out = (time.time() - start_time > TIMEOUT)
+                while (not radio.write(message) or not timed_out):
+                    continue
+                if timed_out:
+                    tb = tb.drop(index) 
+                    break
+                int_value = int.from_bytes(packet_id, byteorder='big')  # convert byte to integer
+                if int_value == 255:
+                    int_value = 0
+                else:
+                    int_value += 1  # increment integer
+                packet_id = int_value.to_bytes(1, byteorder='big')  # convert integer back to byte
+
+def readFile():
+    return
 
 def sendToken():
     """
@@ -54,6 +120,8 @@ def sendToken():
     If Token is sent to a TR with 'token' = 0, 'token' value is updated to 1 and TR is sent to the last row
     If Token is sent to a TR with 'token' = 1, 'token' TR is sent to the last row
     """
+
+    
 
 def receiver():
     """
