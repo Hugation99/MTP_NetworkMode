@@ -13,18 +13,24 @@ FILENAME = 'text.txt'
 #Packet size
 PACKET_SIZE = 32
 
+#End of transmission message
+EOT = [226, 144, 151]
+EOT_BYTES = bytes(EOT)
+
 #Timeout
 TIMEOUT_FILE = 10
 TIMEOUT_TOKEN = 1
+TIMEOUT_STATUS = 2
+TIMEOUT_STATUS_REPLY = 2
 
 #Global Table with the reachable transceivers
 tb = pd.DataFrame(columns=['Address', 'Token', 'File'])
 
 #Token Info, Each transceiver must know if it has had the token or not
-token = False
+token = 0
 
 #File Info, Each TR must know if it has the file or not
-file = False
+file = 0
 
 #These packets have no payload, header=packet
 TOKEN_PACKET = b'\x0D'
@@ -63,26 +69,36 @@ def transmitter():
         continue
 
     del radio
+
+    receiver()
     
     
 
 #this function has to be executed every time the TR is passed the token
 def sendStatus(radio):
     """
-    Sends Status Packet to every Link Addresses. 
-    Adjust retries and delay btw retries
-    Waits for ACKs that have payload. 1 bit token, 1 bit file
+    Sends Status Packet to every Link Addresses with TIMEOUT_STATUS
+    If there is response the open rx pipe and listen for response with TIMEOUT_STATUS_REPLY
     Stores info in a Table together with the corresponding link address. 
         If link address already in table update values, otherwise add new row
     """
     radio.open_rx_pipe(1, OWN_ADDRESS)
     for address in LINK_ADDRESSES:
         radio.open_tx_pipe(address)
-        response = radio.write(HEADER_STATUS+OWN_ADDRESS)
+        response = False
+        timed_out = False
+        start_time = time.time()
+        while not response or not timed_out:
+            response = radio.write(HEADER_STATUS+OWN_ADDRESS)
+            timed_out = (time.time() - start_time > TIMEOUT_STATUS)
+        
         if response:
             radio.listen = True
-            while not radio.available():    # Timeout ??
+            timed_out = False
+            start_time = time.time()
+            while not radio.available() or not timed_out:
                 time.sleep(1/1000)
+                timed_out = (time.time() - start_time > TIMEOUT_STATUS_REPLY)
             answer_packet = radio.read(radio.get_dynamic_payload_size())
             radio.listen = False
 
@@ -113,12 +129,13 @@ def sendFile(radio,filename):
             radio.open_tx_pipe(row['Address'])
             packet_id = b'\x00'
             start_time = time.time()
+            timed_out = False
             for i in range(0, len(file),PACKET_SIZE-2):
                 message = HEADER_FILE_PACKET + packet_id + file[i:i+PACKET_SIZE-2]
 
-                timed_out = (time.time() - start_time > TIMEOUT_FILE)
                 while (not radio.write(message) or not timed_out):
-                    continue
+                    timed_out = (time.time() - start_time > TIMEOUT_FILE)
+
                 if timed_out:
                     tb = tb.drop(index) 
                     break
@@ -128,9 +145,23 @@ def sendFile(radio,filename):
                 else:
                     int_value += 1  # increment integer
                 packet_id = int_value.to_bytes(1, byteorder='big')  # convert integer back to byte
+            
+            if not timed_out:
+                end_packet = HEADER_FILE_PACKET + packet_id + EOT_BYTES
+                while (not radio.write(message) or not timed_out):
+                    timed_out = (time.time() - start_time > TIMEOUT_FILE)            
+    
+    logging.debug('sendFile()')
+    logging.debug('timed_out:'+str(timed_out))
 
-def readFile():
-    return
+def readFile(fileName): #TODO Read file from usb, particular for each team
+    """
+    Read file from usb.
+    Return the file in bytes
+    """
+    with open("transmittedFile.txt", 'rb') as transmittedFile:
+        file_data = transmittedFile.read()
+    return file_data
 
 def sendToken(radio):
     """
@@ -170,6 +201,8 @@ def sendToken(radio):
                     tb = tb.append(row).drop(index) #move row to the last position
                     break
 
+    logging.debug('sendToken()')
+    logging.debug('token_passed:'+str(token_passed))
     return token_passed
 
 
@@ -194,31 +227,95 @@ def receiver():
 
     radio.set_retries(5,15) 
     radio.open_rx_pipe(1, OWN_ADDRESS) 
-    radio.startListening()
+    radio.listen = True
 
     while not radio.available():
         time.sleep(1/1000)
         continue
 
-    
-    
+    received_message = radio.read(radio.get_dynamic_payload_size())
 
+    header = received_message[0]
 
-def receiveStatus():
+    if header == HEADER_STATUS:
+        receiveStatus(radio, received_message)
+    elif header == HEADER_FILE_PACKET:
+        receiveFile(radio, received_message)
+    elif header == TOKEN_PACKET:
+        receiveToken(radio)
+
+def receiveStatus(radio, message):
     """
+    Open Tx pipe with transmitter address
     Build packet using the token and file global variables.
-    Send it back to sender (timeout=5-10s)
+    Send it back to transmitter (timeout=5-10s)
     """
+    radio.listen = False
+    tx_address = message[1:6]
+    radio.open_tx_pipe(tx_address)
+    
+    file_info = file.to_bytes(1, byteorder = 'big')
+    token_info = token.to_bytes(1, byteorder='big')
+    info = HEADER_STATUS_PACKET_REPLY + file_info + token_info
+    response = False
+    timed_out = False
+    start_time = time.time()
+    while not response or not timed_out:
+        response = radio.write(info)
+        timed_out = (time.time() - start_time > TIMEOUT_STATUS)
+    radio.listen = True
+    logging.debug('receiveStatus()')
+    logging.debug('timed_out:'+ str(timed_out))
+    logging.debug('response:' + str(response))
 
-def receiveFile():
+def receiveFile(radio, first_message):
     """
     Loop to receive file until an end of transmission is received (or timeout)
     Save the file to USB
     """
+    last_packet_id = b'\xFF'
+    transmission_end = False
+    message_list = [first_message[2:]]
 
-def receiveToken():
+    timed_out = False
+    start_time = time.time()
+    while not transmission_end or not timed_out:
+        while not radio.available() or not timed_out:
+            time.sleep(1/1000)
+            timed_out = (time.time() - start_time > TIMEOUT_STATUS)
+        if radio.available():
+            received_message = radio.read(radio.get_dynamic_payload_size())
+            header = received_message[0]
+            if header == HEADER_FILE_PACKET:
+                if last_packet_id != received_message[1]:
+                    if received_message[2:] == EOT_BYTES:
+                        transmission_end = True
+                    else:
+                        message_list.append(received_message[2:])
+                    last_packet_id=received_message[1]
+    
+    if transmission_end:
+        file_data = b''.join(message_list)
+        file = 1
+        saveFile(file_data)
+        logging.debug('File data:')
+        logging.debug(file_data)
+
+
+def receiveToken(radio):
     """
     When token packet is received. 
-    Send Token Reply. Update token variable
+    Update token variable
     Then start transmitting mode (send status,...)
     """
+    token = 1
+    del radio
+    logging.debug('Token received')
+    transmitter()
+
+def saveFile(file_data): #TODO Save file in usb, particular for each team
+    """
+    Gets file in bytes.
+    Save file in usb.
+    """
+    pass
