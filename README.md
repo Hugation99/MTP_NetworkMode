@@ -3,3 +3,6 @@
 - Required libraries :+1:
     1. pyrf24
     2. pandas
+    
+- Errors to be fixed:
+    1. Table update and insert
