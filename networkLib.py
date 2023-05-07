@@ -11,7 +11,7 @@ OWN_ADDRESS = b'NodeA1' #TODO Change to each address of each team TR
 LINK_ADDRESSES.remove(OWN_ADDRESS) 
 
 #Filename TODO: Change for each team
-FILENAME = 'text.txt' 
+FILENAME = 'transmittedFile.txt' 
 
 #Packet size
 PACKET_SIZE = 32
@@ -45,11 +45,17 @@ HEADER_FILE_PACKET = b'\x0C'
 
 def transmitter():
     """
+    Initializes file and token value to 1
     Initializes radio
     Calls sendStatus()
     Calls sendFile()
     Calls sendToken()
     """
+    
+    global file, token
+    
+    file = 1
+    token = 1
 
     radio = RF24()
     if not radio.begin(4,0): #TODO: Here the 1st pin cahnegs for each team
@@ -86,6 +92,7 @@ def sendStatus(radio):
         If link address already in table update values, otherwise add new row
     """
     global tb
+    tb.drop(index=tb.index, inplace = True) #empty dataframe
     radio.open_rx_pipe(1, OWN_ADDRESS)
     for address in LINK_ADDRESSES:
         radio.open_tx_pipe(address)
@@ -319,7 +326,7 @@ def receiveToken(radio):
     Update token variable
     Then start transmitting mode (send status,...)
     """
-    token = 1
+    #token = 1
     del radio
     logging.debug('Token received')
     transmitter()
