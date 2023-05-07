@@ -92,8 +92,7 @@ def sendStatus(radio):
         If link address already in table update values, otherwise add new row
     """
     global tb
-    tb.drop(index=tb.index, inplace = True) #empty dataframe
-    radio.open_rx_pipe(1, OWN_ADDRESS)
+    
     for address in LINK_ADDRESSES:
         radio.open_tx_pipe(address)
         response = False
@@ -103,27 +102,30 @@ def sendStatus(radio):
             response = radio.write(HEADER_STATUS+OWN_ADDRESS)
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         
-        if response:
+        if response: 
+            logging.debug("Obtained response from " + address)
+            radio.open_rx_pipe(1, OWN_ADDRESS)
             radio.listen = True
             timed_out = False
             start_time = time.time()
             while not radio.available() and not timed_out:
                 time.sleep(1/1000)
                 timed_out = (time.time() - start_time > TIMEOUT_STATUS_REPLY)
-            answer_packet = radio.read(radio.get_dynamic_payload_size())
-            radio.listen = False
-
-            if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
-                file_status = answer_packet[1]
-                token_status = answer_packet[2]
-                new_row = {'Address':address, 'File': file_status, 'Token':token_status}
-                if (tb['Address'] == new_row['Address']).any():
-                    tb.loc[tb['Address'] == new_row['Address']] = new_row
-                else:
-                    tb.loc[len(tb)] = new_row
-
-    radio.close_rx_pipe(1)
-    logging.debug('sendStatus():')                
+               
+            if radio.available():
+                answer_packet = radio.read(radio.get_dynamic_payload_size())
+                radio.listen = False
+                radio.close_rx_pipe(1)
+                if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
+                    file_status = answer_packet[1]
+                    token_status = answer_packet[2]
+                    new_row = {'Address':address, 'File': file_status, 'Token':token_status}
+                    if (tb['Address'] == new_row['Address']).any():
+                        tb.loc[tb['Address'] == new_row['Address']] = new_row
+                    else:
+                        tb.loc[len(tb)] = new_row
+                        
+    logging.debug('sendStatus() finished:')                
     logging.debug(tb)              
             
 
