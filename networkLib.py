@@ -103,7 +103,7 @@ def sendStatus(radio):
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         
         if response: 
-            logging.debug("Obtained response from " + address)
+            logging.debug("Obtained response from " + str(address))
             radio.open_rx_pipe(1, OWN_ADDRESS)
             radio.listen = True
             timed_out = False
