@@ -120,7 +120,7 @@ def sendStatus(radio):
                     file_status = answer_packet[1]
                     token_status = answer_packet[2]
                     
-                    if (tb['Address'] == address).any():
+                    if address in tb['Address'].values:
                         tb.loc[tb['Address'] == address,['File']] = file_status
                         tb.loc[tb['Address'] == address,['Token']] = token_status
                     else:
@@ -193,6 +193,7 @@ def sendToken(radio):
 
     if 0 in tb['Token'].values:
         for index, row in tb.iterrows():
+            new_row = {'Address':row['Address'], 'File': row['File'], 'Token':row['Token']}
             if row['Token'] == 0:
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
@@ -204,11 +205,12 @@ def sendToken(radio):
                 if token_passed:
                     tb.loc[index,'Token'] = 1
                     tb =tb.drop(index)
-                    tb = pd.concat([tb,row]) #move row to the last position
+                    tb.loc[len(tb.index)] = new_row 
                     break
         
     if not token_passed: 
         for index, row in tb.iterrows():
+            new_row = {'Address':row['Address'], 'File': row['File'], 'Token':row['Token']}
             if row['Token'] == 1:
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
@@ -218,8 +220,8 @@ def sendToken(radio):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
-                    tb =tb.drop(index)#move row to the last position
-                    tb = pd.concat([tb,row])
+                    tb =tb.drop(index)
+                    tb.loc[len(tb.index)] = new_row 
                     break
 
     logging.debug('sendToken()')
