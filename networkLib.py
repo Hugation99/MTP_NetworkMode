@@ -119,10 +119,12 @@ def sendStatus(radio):
                 if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
                     file_status = answer_packet[1]
                     token_status = answer_packet[2]
-                    new_row = {'Address':address, 'File': file_status, 'Token':token_status}
-                    if (tb['Address'] == new_row['Address']).any():
-                        tb.loc[tb['Address'] == new_row['Address']] = new_row
+                    
+                    if (tb['Address'] == address).any():
+                        tb.loc[tb['Address'] == address,['File']] = file_status
+                        tb.loc[tb['Address'] == address,['Token']] = token_status
                     else:
+                        new_row = {'Address':address, 'File': file_status, 'Token':token_status}
                         tb.loc[len(tb)] = new_row
                         
     logging.debug('sendStatus() finished:')                
