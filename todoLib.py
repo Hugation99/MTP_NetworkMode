@@ -1,6 +1,14 @@
 from pyrf24 import RF24, rf24
+from networkLib import *
 
-OWN_ADDRESS = b'NodeA1' #TODO Change to each address of each team TR
+NODE_A1 = b'75369'
+NODE_A2 = b'02736'
+NODE_B1 = b'53827'
+NODE_B2 = b'91684'
+NODE_C1 = b'81629'
+NODE_C2 = b'63926'
+
+OWN_ADDRESS = NODE_A1 #TODO Change to each address of each team TR
 
 #Filename TODO: Change for each team
 FILENAME = 'transmittedFile.txt' 

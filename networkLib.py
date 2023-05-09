@@ -8,7 +8,7 @@ logging.basicConfig(format='%(asctime)s %(levelname)s:%(funcName)s:%(message)s',
                     level=logging.DEBUG)
 
 #Array of link addresses (5 bytes each)
-LINK_ADDRESSES = [b'NodeA1', b'NodeA2', b'NodeB1', b'NodeB2', b'NodeC1', b'NodeC2']
+LINK_ADDRESSES = [NODE_A1, NODE_A2, NODE_B1, NODE_B2, NODE_C1, NODE_C2]
 
 LINK_ADDRESSES.remove(OWN_ADDRESS) 
 
@@ -96,6 +96,8 @@ def sendStatus(radio):
         response = False
         timed_out = False
         start_time = time.time()
+        radio.flush_tx()
+        radio.flush_rx()
         while not response and not timed_out:
             response = radio.write(HEADER_STATUS+OWN_ADDRESS)
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
