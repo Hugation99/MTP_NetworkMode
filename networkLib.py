@@ -88,9 +88,9 @@ def sendStatus(radio):
         If link address already in table update values, otherwise add new row
     """
     global tb
-    tb.drop(tb.index,inplace=True) 
-    
+        
     for address in LINK_ADDRESSES:
+        radio.listen = False
         radio.open_tx_pipe(address)
         response = False
         timed_out = False
