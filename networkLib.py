@@ -2,16 +2,14 @@ from pyrf24 import RF24, rf24
 import pandas as pd
 import time
 import logging
+from todoLib import *
 
 logging.basicConfig(level=logging.DEBUG)
 
 #Array of link addresses (5 bytes each)
 LINK_ADDRESSES = [b'NodeA1', b'NodeA2', b'NodeB1', b'NodeB2', b'NodeC1', b'NodeC2']
-OWN_ADDRESS = b'NodeA1' #TODO Change to each address of each team TR
-LINK_ADDRESSES.remove(OWN_ADDRESS) 
 
-#Filename TODO: Change for each team
-FILENAME = 'transmittedFile.txt' 
+LINK_ADDRESSES.remove(OWN_ADDRESS) 
 
 #Packet size
 PACKET_SIZE = 32
@@ -57,9 +55,7 @@ def transmitter():
     file = 1
     token = 1
 
-    radio = RF24()
-    if not radio.begin(4,0): #TODO: Here the 1st pin cahnegs for each team
-        raise OSError("nRF24L01 hardware isn't responding")
+    radio = initializeRadio()
     radio.payload_size = 32
     radio.channel = 26 #6A 20
     radio.data_rate = rf24.RF24_250KBPS
@@ -78,7 +74,7 @@ def transmitter():
         continue
 
     del radio
-
+    time.sleep(0.5)
     receiver()
     
     
@@ -103,7 +99,8 @@ def sendStatus(radio):
             response = radio.write(HEADER_STATUS+OWN_ADDRESS)
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         
-        if response: 
+        if response:
+            time.sleep(0.5) 
             logging.debug("Obtained response from " + str(address))
             radio.open_rx_pipe(1, OWN_ADDRESS)
             radio.listen = True
@@ -117,6 +114,7 @@ def sendStatus(radio):
                 answer_packet = radio.read(radio.get_dynamic_payload_size())
                 radio.listen = False
                 radio.close_rx_pipe(1)
+                time.sleep(0.5)
                 if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
                     file_status = answer_packet[1]
                     token_status = answer_packet[2]
@@ -148,10 +146,12 @@ def sendFile(radio,filename):
             packet_id = b'\x00'
             start_time = time.time()
             timed_out = False
+            
             for i in range(0, len(file),PACKET_SIZE-2):
                 message = HEADER_FILE_PACKET + packet_id + file[i:i+PACKET_SIZE-2]
-
-                while (not radio.write(message) and not timed_out):
+                response=False
+                while (not response and not timed_out):
+                    response = radio.write(message)
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)
 
                 if timed_out:
@@ -172,14 +172,6 @@ def sendFile(radio,filename):
     logging.debug('sendFile()')
     logging.debug('timed_out:'+str(timed_out))
 
-def readFile(fileName): #TODO Read file from usb, particular for each team
-    """
-    Read file from usb.
-    Return the file in bytes
-    """
-    with open("transmittedFile.txt", 'rb') as transmittedFile:
-        file_data = transmittedFile.read()
-    return file_data
 
 def sendToken(radio):
     """
@@ -196,6 +188,7 @@ def sendToken(radio):
         for index, row in tb.iterrows():
             new_row = {'Address':row['Address'], 'File': row['File'], 'Token':row['Token']}
             if row['Token'] == 0:
+                time.sleep(0.5)
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
@@ -213,6 +206,7 @@ def sendToken(radio):
         for index, row in tb.iterrows():
             new_row = {'Address':row['Address'], 'File': row['File'], 'Token':row['Token']}
             if row['Token'] == 1:
+                time.sleep(0.5)
                 start_time = time.time()
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
@@ -230,16 +224,13 @@ def sendToken(radio):
     return token_passed
 
 
-
 def receiver():
     """
     Loop until receives a message.
     Take first byte (Header) and identify the message type.
     Call the corresponding function.
     """
-    radio = RF24()
-    if not radio.begin(4,0): #TODO: Here the 1st pin changes for each team
-        raise OSError("nRF24L01 hardware isn't responding")
+    radio = initializeRadio()
     radio.payload_size = 32
     radio.channel = 26 #6A 20
     radio.data_rate = rf24.RF24_250KBPS
@@ -275,6 +266,7 @@ def receiveStatus(radio, message):
     Build packet using the token and file global variables.
     Send it back to transmitter (timeout=5-10s)
     """
+    time.sleep(0.5)
     radio.listen = False
     tx_address = message[1:6]
     radio.open_tx_pipe(tx_address)
@@ -289,6 +281,7 @@ def receiveStatus(radio, message):
         response = radio.write(info)
         timed_out = (time.time() - start_time > TIMEOUT_STATUS)
     radio.listen = True
+    time.sleep(0.5)
     logging.debug('receiveStatus()')
     logging.debug('timed_out:'+ str(timed_out))
     logging.debug('response:' + str(response))
@@ -335,13 +328,6 @@ def receiveToken(radio):
     """
     #token = 1
     del radio
+    time.sleep(0.5)
     logging.debug('Token received')
     transmitter()
-
-def saveFile(file_data): #TODO Save file in usb, particular for each team
-    """
-    Gets file in bytes.
-    Save file in usb.
-    """
-    with open('transmittedFile.txt','wb') as transmittedFile:
-        transmittedFile.write(file_data)
