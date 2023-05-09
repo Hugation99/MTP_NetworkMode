@@ -167,8 +167,12 @@ def sendFile(radio,filename):
             
             if not timed_out:
                 end_packet = HEADER_FILE_PACKET + packet_id + EOT_BYTES
-                while (not radio.write(end_packet) and not timed_out):
-                    timed_out = (time.time() - start_time > TIMEOUT_FILE)            
+                response = False
+                while (not response and not timed_out):
+                    response = radio.write(end_packet)
+                    timed_out = (time.time() - start_time > TIMEOUT_FILE)
+                if response:
+                    tb.loc[index, ['File']] = 1            
     
     logging.debug('timed_out:'+str(timed_out))
 
