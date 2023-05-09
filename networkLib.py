@@ -200,7 +200,7 @@ def sendToken(radio):
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
                     tb.loc[index,'Token'] = 1
-                    tb =tb.drop(index)
+                    tb = tb.drop(index)
                     tb = pd.concat([tb, pd.DataFrame(new_row, index=[0])], ignore_index=True)
                     break
         
