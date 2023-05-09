@@ -4,7 +4,8 @@ import time
 import logging
 from todoLib import *
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(levelname)s:%(funcName)s:%(message)s',
+                    level=logging.DEBUG)
 
 #Array of link addresses (5 bytes each)
 LINK_ADDRESSES = [b'NodeA1', b'NodeA2', b'NodeB1', b'NodeB2', b'NodeC1', b'NodeC2']
@@ -190,6 +191,7 @@ def sendToken(radio):
             if row['Token'] == 0:
                 time.sleep(0.5)
                 start_time = time.time()
+                radio.listen = False
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
                 timed_out = False
@@ -208,6 +210,7 @@ def sendToken(radio):
             if row['Token'] == 1:
                 time.sleep(0.5)
                 start_time = time.time()
+                radio.listen = False
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
                 timed_out = False
