@@ -201,8 +201,7 @@ def sendToken(radio):
                 if token_passed:
                     tb.loc[index,'Token'] = 1
                     tb =tb.drop(index)
-                    tb.loc[len(tb.index)] = new_row 
-                    break
+                    tb = tb._append(new_row,ignore_index=True)
         
     if not token_passed: 
         for index, row in tb.iterrows():
@@ -219,11 +218,12 @@ def sendToken(radio):
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
                     tb =tb.drop(index)
-                    tb.loc[len(tb.index)] = new_row 
+                    tb = tb._append(new_row,ignore_index=True)
                     break
 
-    logging.debug('sendToken()')
-    logging.debug('token_passed:'+str(token_passed))
+    logging.debug('token passed:'+str(token_passed))
+    logging.debug(tb)
+    
     return token_passed
 
 
