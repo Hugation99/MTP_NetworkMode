@@ -201,7 +201,6 @@ def sendToken(radio):
                 if token_passed:
                     tb.loc[index,'Token'] = 1
                     tb = tb.drop(index)
-                    
                     tb = pd.concat([tb, pd.DataFrame(new_row, index=[0])], ignore_index=True)
                     break
         
