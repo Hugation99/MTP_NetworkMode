@@ -127,7 +127,7 @@ def sendStatus(radio):
                         new_row = {'Address':address, 'File': file_status, 'Token':token_status}
                         tb.loc[len(tb)] = new_row
                         
-    logging.debug('sendStatus() finished:')                
+                  
     logging.debug(tb)              
             
 
@@ -170,7 +170,6 @@ def sendFile(radio,filename):
                 while (not radio.write(end_packet) and not timed_out):
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)            
     
-    logging.debug('sendFile()')
     logging.debug('timed_out:'+str(timed_out))
 
 
@@ -201,7 +200,6 @@ def sendToken(radio):
                 if token_passed:
                     tb.loc[index,'Token'] = 1
                     tb = tb.drop(index)
-                    
                     tb = pd.concat([tb, pd.DataFrame(new_row, index=[0])], ignore_index=True)
                     break
         
@@ -287,7 +285,7 @@ def receiveStatus(radio, message):
         timed_out = (time.time() - start_time > TIMEOUT_STATUS)
     radio.listen = True
     time.sleep(0.5)
-    logging.debug('receiveStatus()')
+
     logging.debug('timed_out:'+ str(timed_out))
     logging.debug('response:' + str(response))
 
@@ -321,8 +319,8 @@ def receiveFile(radio, first_message):
         file_data = b''.join(message_list)
         file = 1
         saveFile(file_data)
-        logging.debug('File data:')
-        logging.debug(file_data)
+        logging.debug('File received')
+        #logging.debug(file_data)
 
 
 def receiveToken(radio):
