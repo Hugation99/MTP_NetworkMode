@@ -301,6 +301,7 @@ def receiveFile(radio, first_message):
     Loop to receive file until an end of transmission is received (or timeout)
     Save the file to USB
     """
+    global file
     last_packet_id = b'\xFF'
     transmission_end = False
     message_list = [first_message[2:]]
@@ -336,7 +337,6 @@ def receiveToken(radio):
     Update token variable
     Then start transmitting mode (send status,...)
     """
-    #token = 1
     del radio
     time.sleep(0.5)
     logging.debug('Token received')
