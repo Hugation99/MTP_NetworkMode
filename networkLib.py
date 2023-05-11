@@ -68,6 +68,9 @@ def transmitter():
     radio.listen = False
 
     sendStatus(radio)
+    
+    while tb.empty:
+      sendStatus(radio)
 
     sendFile(radio,FILENAME)
 
