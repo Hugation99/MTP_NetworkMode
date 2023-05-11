@@ -15,7 +15,7 @@ FILENAME = 'transmittedFile.txt'
 
 def initializeRadio():
     radio = RF24()
-    if not radio.begin(4,0): #TODO: Here the 1st pin cahnegs for each team
+    if not radio.begin(22,0): #TODO: Here the 1st pin cahnegs for each team
         raise OSError("nRF24L01 hardware isn't responding")
     return radio
 

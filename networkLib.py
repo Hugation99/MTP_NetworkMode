@@ -4,14 +4,13 @@ import time
 import logging
 from todoLib import *
 
-logging.basicConfig(format='%(asctime)s %(levelname)s:%(funcName)s:%(message)s',
-                    level=logging.DEBUG)
+logging.basicConfig( encoding='utf-8', level=logging.DEBUG,format='[%(asctime)s] %(message)s')
 
 #Array of link addresses (5 bytes each)
 LINK_ADDRESSES = [NODE_A1, NODE_A2, NODE_B1, NODE_B2, NODE_C1, NODE_C2]
 
 LINK_ADDRESSES.remove(OWN_ADDRESS) 
-
+logging.info("My Own address is %s", OWN_ADDRESS)
 #Packet size
 PACKET_SIZE = 32
 
@@ -60,13 +59,14 @@ def transmitter():
     radio.payload_size = 32
     radio.channel = 26 #6A 20
     radio.data_rate = rf24.RF24_250KBPS
-    radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_HIGH)
+    radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_LOW)
     radio.dynamic_payloads = True
     radio.set_auto_ack(True)
     radio.ack_payloads = False
     radio.set_retries(5, 15) 
     radio.listen = False
 
+    logging.info("I currently have the role of transmitter.")
     sendStatus(radio)
 
     sendFile(radio,FILENAME)
@@ -88,8 +88,11 @@ def sendStatus(radio):
     Stores info in a Table together with the corresponding link address. 
         If link address already in table update values, otherwise add new row
     """
+
     global tb
-        
+
+    logging.info("Sending status query to all nodes on my list, to see whoch ones respond.")
+    
     for address in LINK_ADDRESSES:
         radio.listen = False
         radio.open_tx_pipe(address)
@@ -103,10 +106,11 @@ def sendStatus(radio):
             timed_out = (time.time() - start_time > TIMEOUT_STATUS)
         
         if response:
-            time.sleep(0.5) 
-            logging.debug("Obtained response from " + str(address))
-            radio.open_rx_pipe(1, OWN_ADDRESS)
+            logging.info("Obtained AUTOACK response from link address: %s", address)
+            logging.info("Going to swap to RX role on this link in order to receive the status.")
             radio.listen = True
+            radio.open_rx_pipe(1, OWN_ADDRESS)
+            time.sleep(0.5) 
             timed_out = False
             start_time = time.time()
             while not radio.available() and not timed_out:
@@ -119,18 +123,21 @@ def sendStatus(radio):
                 radio.close_rx_pipe(1)
                 time.sleep(0.5)
                 if answer_packet[0].to_bytes(1, byteorder='big') == HEADER_STATUS_PACKET_REPLY:
+                    
                     file_status = answer_packet[1]
                     token_status = answer_packet[2]
-                    
+                    logging.info("Received status reply correctly! With 'file_status' = %d and 'token_status' = %d", answer_packet[1], answer_packet[2])
                     if address in tb['Address'].values:
                         tb.loc[tb['Address'] == address,['File']] = file_status
                         tb.loc[tb['Address'] == address,['Token']] = token_status
                     else:
                         new_row = {'Address':address, 'File': file_status, 'Token':token_status}
                         tb.loc[len(tb)] = new_row
+        else:
+            logging.info("Link address %s, timed out while querying status. Skpping to next address.", address )
                         
-                  
-    logging.debug(tb)              
+    logging.info('Node Table at status query:')
+    logging.info('\n\t' + tb.to_string().replace('\n', '\n\t'))              
             
 
 
@@ -141,11 +148,14 @@ def sendFile(radio,filename):
     If a TR timeouts, eliminate from tb so token is not passed to it.
     """
     global tb
+
+    logging.info("Going to send the file to the nodes that don't have it yet.")
     file = readFile(filename)
     timed_out = False
     for index, row in tb.iterrows():
         if row['File'] == 0:
             radio.open_tx_pipe(row['Address'])
+            logging.info("Sending file to link with address: %s",row['Address'])
             packet_id = b'\x00'
             start_time = time.time()
             timed_out = False
@@ -158,9 +168,12 @@ def sendFile(radio,filename):
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)
 
                 if timed_out:
-                    tb = tb.drop(index) 
+                    tb = tb.drop(index)
+                    logging.info("Node with link address %s (index %d on table) timed out. Deleting his entry from table. Breaking", row['Address'], index)
                     break
+                
                 int_value = int.from_bytes(packet_id, byteorder='big')  # convert byte to integer
+                logging.debug("Correclty sent file fragment %d", int_value)
                 if int_value == 255:
                     int_value = 0
                 else:
@@ -174,7 +187,11 @@ def sendFile(radio,filename):
                     response = radio.write(end_packet)
                     timed_out = (time.time() - start_time > TIMEOUT_FILE)
                 if response:
-                    tb.loc[index, ['File']] = 1            
+                    logging.info("EOT correclty transimted for file tx.")
+                    logging.info("Going to put that node with link address %s (index %d) has correctly received the file", row['Address'], index )
+                    tb.loc[index, ['File']] = 1
+            else:
+                logging.info("EOT timed out (no auto ack received)!!!!")
     
     logging.debug('timed_out:'+str(timed_out))
 
@@ -200,17 +217,20 @@ def sendToken(radio):
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
                 timed_out = False
+                logging.info("Attempting to pass token to node link address: %s",row['Address'])
                 while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
+                    logging.info("I successfuly passed the token to node link address: %s", row['Address'])
                     #tb.loc[index,'Token'] = 1
                     new_row['Token'] = 1
                     tb = tb.drop(index)
                     tb = pd.concat([tb, pd.DataFrame(new_row, index=[0])], ignore_index=True)
                     break
         
-    if not token_passed: 
+    if not token_passed:
+        logging.info("I couldn't give the token to anyone that didn't had it. Going to try to give it to someone that already had it, in case they can reach other nodes.")
         for index, row in tb.iterrows():
             new_row = {'Address':row['Address'], 'File': row['File'], 'Token':row['Token']}
             if row['Token'] == 1:
@@ -220,16 +240,18 @@ def sendToken(radio):
                 radio.open_tx_pipe(row['Address'])
                 token_passed = False
                 timed_out = False
+                logging.info("Attempting to pass token to node link address (this node already had the token): %s",row['Address'])
                 while (not token_passed and not timed_out):
                     token_passed = radio.write(TOKEN_PACKET)
                     timed_out = (time.time() - start_time > TIMEOUT_TOKEN)
                 if token_passed:
+                    logging.info("I successfuly passed the token to node link address (this node already had the token): %s", row['Address'])
                     tb =tb.drop(index)
                     tb = pd.concat([tb, pd.DataFrame(new_row, index=[0])], ignore_index=True)
                     break
 
     logging.debug('token passed:'+str(token_passed))
-    logging.debug(tb)
+    logging.info('\n\t' + tb.to_string().replace('\n', '\n\t'))
     
     return token_passed
 
@@ -245,7 +267,7 @@ def receiver():
     radio.channel = 26 #6A 20
     radio.data_rate = rf24.RF24_250KBPS
 
-    radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_HIGH)
+    radio.set_pa_level(rf24.rf24_pa_dbm_e.RF24_PA_LOW)
     radio.dynamic_payloads = True
     radio.set_auto_ack(True)
     radio.ack_payloads = False
@@ -258,16 +280,19 @@ def receiver():
         while not radio.available():
             time.sleep(1/1000)
             continue
-
+        
         received_message = radio.read(radio.get_dynamic_payload_size())
-
+        logging.info("I received a message!")
         header = received_message[0].to_bytes(1, byteorder='big') 
 
         if header == HEADER_STATUS:
+            logging.info("The received message is an status query")
             receiveStatus(radio, received_message)
         elif header == HEADER_FILE_PACKET:
+            logging.info("The received message is a file message")
             receiveFile(radio, received_message)
         elif header == TOKEN_PACKET:
+            logging.info("The received message is a Token message.")
             receiveToken(radio)
 
 def receiveStatus(radio, message):
@@ -293,8 +318,8 @@ def receiveStatus(radio, message):
     radio.listen = True
     time.sleep(0.5)
 
-    logging.debug('timed_out:'+ str(timed_out))
-    logging.debug('response:' + str(response))
+    logging.debug('timed_out (at receiveStatus):'+ str(timed_out))
+    logging.debug('response (at receiveStatus):' + str(response))
 
 def receiveFile(radio, first_message):
     """
@@ -327,7 +352,7 @@ def receiveFile(radio, first_message):
         file_data = b''.join(message_list)
         file = 1
         saveFile(file_data)
-        logging.debug('File received')
+        logging.debug('File received.')
         #logging.debug(file_data)
 
 
@@ -339,5 +364,5 @@ def receiveToken(radio):
     """
     del radio
     time.sleep(0.5)
-    logging.debug('Token received')
+    logging.debug('Token received. Switching to transmitter mode.')
     transmitter()
