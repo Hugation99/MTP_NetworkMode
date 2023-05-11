@@ -67,12 +67,18 @@ def transmitter():
     radio.listen = False
 
     logging.info("I currently have the role of transmitter.")
-    sendStatus(radio)
+    tokenpassed = False
+    while not tokenpassed:
+        sendStatus(radio)
+        while tb.empty:
+            sendStatus(radio)
+      
+        sendFile(radio,FILENAME)
 
-    sendFile(radio,FILENAME)
-
-    while not sendToken(radio):
-        continue
+        if not tb.empty:
+            while not sendToken(radio):
+                continue
+            tokenpassed = True
 
     del radio
     time.sleep(0.5)
