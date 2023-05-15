@@ -1,0 +1,30 @@
+@startuml
+
+start
+
+if (transmitter) then (yes)
+  :Initialize file and token;
+  :Initialize radio;
+  while (true) is (sendStatus)
+    :Send status;
+    :Send file;
+    while (not token passed) is (waitForToken)
+      :Receiver;
+    endwhile
+  endwhile
+else (no)
+  :Initialize radio;
+  while (not available) is (waitForData)
+    if (header = STATUS) then (yes)
+      :Receive status;
+    elseif (header = FILE_PACKET) then (yes)
+      :Receive file;
+    elseif (header = TOKEN_PACKET) then (yes)
+      :Receive token;
+    endif
+  endwhile
+endif
+
+stop
+
+@enduml
